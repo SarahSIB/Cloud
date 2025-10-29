@@ -253,3 +253,127 @@ sarah@azure1:~$ sudo apt install mariadb-client -y
 sarah@azure1:~$ mariadb -u meow -p -h 10.0.0.5
 Enter password:
 Welcome to the MariaDB monitor.
+
+
+A. Récupération de l'application sur la machine¶
+🌞 Récupération de l'application sur la machine
+
+l'application est dispo sur mon dépôt git, clique clique clique moi
+l'application doit être déposée dans /opt/meow/
+Example
+
+sarah@azure1:~$ cd /opt/meow
+sarah@azure1:/opt/meow$ git clone 
+
+
+B. Installation des dépendances de l'application¶
+🌞 Installation des dépendances de l'application
+
+déplacez-vous dans le dossier de l'application
+exécutez les commandes suivantes :
+# Assurez vous d'être dans le dossier où se trouve l'application
+cd /opt/meow
+
+# Création d'un environnement virtuel (on pourrit pas l'install Python de la machine hôte)
+sarah@azure1:/opt/meow$ python3 -m venv /opt/meow/venv
+sudo chown -R webapp:webapp /opt/meow/venv
+
+# Installation des dépendances de l'application
+sarah@azure1:/opt/meow$ sudo ./bin/pip install -r requirements.txt
+Collecting Flask
+
+
+C. 🌞  Configuration de l'application¶
+
+
+modifier le fichier /opt/meow/.env
+sarah@azure1:/opt/meow$ cat .env
+# Flask Configuration
+FLASK_SECRET_KEY=ewnFw95H7qBeGiVvkQl9YmnJohW6NCMMqR0arxfnWYASeCDvzwQwzLxMCboAOi3e
+FLASK_DEBUG=False
+FLASK_HOST=0.0.0.0
+FLASK_PORT=8000
+# Database Configuration
+DB_HOST= 10.0.0.5
+DB_PORT=3306
+DB_NAME=meow_database
+DB_USER=meow
+DB_PASSWORD=meow
+
+D.🌞 Gestion de users et de droits
+
+créez un utilisateur webapp (commande useradd)
+le dossier /opt/meow et tout son contenu doivent appartenir (commande chown) :
+
+au user webapp
+au groupe webapp
+les "autres" ne doivent avoir aucun droit sur ce dossier et son contenu (commande chmod)
+
+sarah@azure1:/opt/meow$ sudo useradd -m -s /bin/bash webapp
+sarah@azure1:/opt/meow$ sudo chown -R webapp:webapp /opt/meow
+sarah@azure1:/opt/meow$ sudo chmod o-rwx /opt/meow
+
+
+🌞E Création d'un service webapp.service pour lancer l'application
+
+créez le fichier /etc/systemd/system/webapp.service
+il doit avoir le contenu suivant :
+sarah@azure1:/opt/meow$ sudo nano /etc/systemd/system/webapp.service
+
+[Unit]
+Description=Super Webapp MEOW
+After=network.target
+
+[Service]
+User=webapp
+Group=webapp
+WorkingDirectory=/opt/meow
+ExecStart=/opt/meow/venv/bin/python /opt/meow/app.py --host=0.0.>
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+exécutez ensuite un sudo systemctl daemon-reload pour indiquer au système qu'on a modifié les services
+(venv) sarah@azure1:~$ sudo systemctl daemon-reload
+(venv) sarah@azure1:~$ sudo systemctl enable webapp
+(venv) sarah@azure1:~$ sudo systemctl start webapp
+(venv) sarah@azure1:~$ sudo systemctl status webapp
+
+
+2. Verfier l'état des status
+(venv) sarah@azure1:~$ sudo ufw status
+Status: active
+
+To                         Action      From
+--                         ------      ----
+80/tcp                     ALLOW       Anywhere
+22/tcp                     ALLOW       Anywhere
+8000/tcp                   ALLOW       Anywhere
+80/tcp (v6)                ALLOW       Anywhere (v6)
+22/tcp (v6)                ALLOW       Anywhere (v6)
+8000/tcp (v6)              ALLOW       Anywhere (v6)
+
+3. Visitez l'application¶
+🌞 L'application devrait être fonctionnelle sans soucis à partir de là
+
+vous pouvez visiter http://<_IP_PUBLIQUE_DE_azure1.tp1>
+vérifier que l'app fonctionne en postant un message
+mettez-moi un curl vers l'URL dans le compte-rendu (juste les premières lignes svp ça ira)
+
+ curl http://20.19.170.10:8000
+
+
+StatusCode        : 200
+StatusDescription : OK
+Content           : <!DOCTYPE html>
+                    <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport"
+                    content="width=device-width,
+                    initial-scale=1.0">
+                        <title>Purr Messages - Cat Message
+                    Board</title>
+                        <...
+RawContent        : HTTP/1.1 200 OK
