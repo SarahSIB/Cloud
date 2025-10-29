@@ -1,0 +1,255 @@
+
+# I. Prérequis
+
+## 1. Starting blocks
+
+➜  **Activez votre compte Azure for Students**
+
+Fait
+
+➜ **Installer le Azure CLI `az` sur votre poste**
+
+winget install --exact --id Microsoft.AzureCLI
+az login
+az account show
+
+➜ **Installer Terraform sur votre poste**
+ winget install HashiCorp.Terraform
+terraform plan -help
+Usage: terraform [global options] plan [options]
+
+
+## 2. Une paire de clés SSH
+
+
+### A. Choix de l'algorithme de chiffrement
+
+🌞 **Déterminer quel algorithme de chiffrement utiliser pour vos clés**
+
+- **vous n'utiliserez PAS RSA**, 
+
+Lien qui explique pourquoi on doit pas utiliser RSA : http://revue.sesamath.net/spip.php?breve3726
+
+
+
+### B. Génération de votre paire de clés
+
+🌞 **Générer une paire de clés pour ce TP**
+
+PS C:\Users\sarah> ssh-keygen -t ed25519 -f $HOME\.ssh\cloud_tp
+Generating public/private ed25519 key pair.
+Enter passphrase (empty for no passphrase):
+Enter same passphrase again:
+Your identification has been saved in C:\Users\sarah\.ssh\cloud_tp
+Your public key has been saved in C:\Users\sarah\.ssh\cloud_tp.pub
+The key fingerprint is:
+SHA256:NRSorfuJpO7PrXw7ZKii95vFe4k8KTTZgosOp77C/O0 sarah@LAPTOP-NQC7EJ07
+The key's randomart image is:
++--[ED25519 256]--+
+|         .o.     |
+|        ..       |
+|       o  o      |
+|      . .. .     |
+|   . o oS        |
+|  . =.+ o        |
+|+..o =+* .       |
+|+=+ +B*+=.       |
+|**o*OEB*=o       |
++----[SHA256]-----+
+PS C:\Users\sarah> dir $HOME\.ssh
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+-a----        29/10/2025     11:40            464 cloud_tp
+-a----        29/10/2025     11:40            104 cloud_tp.pub
+-a----        18/11/2024     18:05             55 
+
+
+PS C:\Users\sarah>
+
+
+### C. Agent SSH
+
+![Encrypt SSH Keys](../../assets/img/encrypt_ssh_keys.jpg)
+
+
+🌞 **Configurer un agent SSH sur votre poste**
+
+Get-Service -Name ssh-agent | Set-Service -StartupType Manual
+Start-Service ssh-agent
+ssh-add C:\Users\sarah\.ssh\cloud_tp
+Identity added: C:\Users\sarah\.ssh\cloud_tp (sarah@LAPTOP-NQC7EJ07)
+
+
+⚠️⚠️⚠️ **Tout le reste du TP DOIT être effectué avec un agent SSH actif et fonctionnel : vous ne saisissez jamais le chemin vers votre clé ou un quelconque password.**
+
+![Logo OpenSSH](../../assets/img/logo_openssh.png)
+
+> C'est le vrai logo de OpenSSH si vous vous demandez ce que c'est que ce truc. J'le trouve trop flex aha.
+
+
+II. Spawn des VMs¶
+
+
+🌞 Connectez-vous en SSH à la VM pour preuve
+PS C:\Users\sarah\.ssh> ssh azureuser@52.143.177.94
+The authenticity of host '52.143.177.94 (52.143.177.94)' can't be established.
+ED25519 key fingerprint is SHA256:qqchose
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '52.143.177.94' (ED25519) to the list of known hosts.
+Welcome to Ubuntu 24.04.3 LTS (GNU/Linux 6.14.0-1012-azure x86_64)
+ 
+cette connexion ne doit demander aucun password : votre clé a été ajoutée à votre Agent SSH
+1. az : a programmatic approach¶
+La commande az permet de réaliser tout ce que fait la WebUI, mais directement depuis la ligne de commande.
+
+Info
+🌞 Créez une VM depuis le Azure CLI : azure1.tp1
+
+en utilisant uniquement la commande az donc
+je vous laisse faire vos recherches pour créer une VM avec la commande az
+
+az vm create --resource-group tp1-rg --name azure1.tp1 --location francecentral --image Ubuntu2204 --size Standard_B1s --admin-username sarah --authentication-type ssh --ssh-key-values "C:\Users\sarah\.ssh\cloud_tp.pub"
+Example
+🌞 Assurez-vous que vous pouvez vous connecter à la VM en SSH sur son IP publique
+PS C:\Users\sarah> ssh sarah@20.19.170.10
+The authenticity of host '20.19.170.10 (20.19.170.10)' can't be established.
+ED25519 key fingerprint is SHA256:laxDW08DG1qL7EfkPIu4EDzh0I5tHVBs1TK8kdAGq3o.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+
+Je fais exit puis je me reco une deuixieme fois pour voir si on me demande pas le MDP
+ssh sarah@20.19.170.10 Last login: Wed Oct 29 18:21:03 2025 from 91.164.176.223
+
+🌞 Une fois connecté, prouvez la présence...
+sarah@azure1:~$ systemctl status walinuxagent
+● walinuxagent.service - Azure Linux Agent
+     Loaded: loaded (/lib/systemd/system/walinuxagent.service; e>
+    Drop-In: /usr/lib/systemd/system/walinuxagent.service.d
+             └─10-Slice.conf
+             /run/systemd/system.control/walinuxagent.service.d
+             └─50-CPUAccounting.conf, 50-MemoryAccounting.conf
+     Active: active (running)
+
+...du service cloud-init.service
+sarah@azure1:~$ systemctl status cloud-init
+● cloud-init.service - Cloud-init: Network Stage
+     Loaded: loaded (/lib/systemd/system/cloud-init.service; ena>
+     Active: active (exited)
+
+1. Spawn moar moar moaaar VMs¶
+A. Another VM another friend :d¶
+🌞 Créez une deuxième VM : azure2.tp1
+
+avec une commande az
+elle ne doit PAS avoir d'adresse IP publique
+PS C:\Users\sarah> az vm create --resource-group tp1-rg --name azure2.tp1 --location francecentral --image Ubuntu2204 --size Standard_B1s --admin-username sarah --authentication-type ssh --ssh-key-values "C:\Users\sarah\.ssh\cloud_tp.pub" --public-ip-address '""'
+{
+  "fqdns": "",
+  "id": "/subscriptions/2769a842-a53d-407d-bb72-531baa95fd93/resourceGroups/tp1-rg/providers/Microsoft.Compute/virtualMachines/azure2.tp1",
+  "location": "francecentral",
+  "macAddress": "60-45-BD-6D-F3-2A",
+  "powerState": "VM running",
+  "privateIpAddress": "10.0.0.5",
+  "publicIpAddress": "",
+  "resourceGroup": "tp1-rg"
+}
+🌞 Affichez des infos au sujet de vos deux VMs
+
+avec une/des commande(s) az
+on doit voir :
+
+que azure1.tp1 a une adresse IP publique et une adresse IP privée
+que azure2.tp1 n'a PAS d'adresse IP publique mais a une adresse IP privée
+
+PS C:\Users\sarah> az vm list-ip-addresses --resource-group tp1-rg --output table
+VirtualMachine    PublicIPAddresses    PrivateIPAddresses
+----------------  -------------------  --------------------
+azure1.tp1        20.19.170.10         10.0.0.4
+azure2.tp1                             10.0.0.5
+
+
+
+B. Config SSH client¶
+Tip
+🌞 Configuration SSH client pour les deux machines
+
+vous devez rebondir sur azure1.tp1 (car c'est la seule exposée sur internet) pour accéder à azure2.tp1
+
+notepad C:\Users\sarah\.ssh\config
+
+vous devez utiliser un fichier config SSH client, pour que ces deux commandes fonctionnent juste :
+ssh az1 # pour se connecter à azure1.tp1
+ssh az2 # pour se connecter à azure2.tp1
+
+
+ssh az1
+Welcome to Ubuntu 22.04.5 LTS (GNU/Linux 6.8.0-1041-azure x86_64)
+PS C:\Users\sarah> ssh az2
+The authenticity of host '10.0.0.5 (<no hostip for proxy command>)' can't be established.
+ED25519 key fingerprint is SHA256:4Ayv6o8bi1AXDIYwn9zZSIgIekR2BhzdpsFboq5348c.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])?
+
+
+III - Machine azure2.tp1¶
+Ui on commence par azure2.tp1. C'est pas une erreur.
+
+On va setup un serveur de base de données sur azure2.tp1.
+
+
+🌞 Installer MySQL/MariaDB sur azure2.tp1
+az2
+sarah@azure2:~$ sudo apt update
+sarah@azure2:~$ sudo apt install -y mariadb-server
+🌞 Démarrer le service MySQL/MariaDB sur azure2.tp1
+
+sarah@azure2:~$ sudo systemctl start mariadb
+sarah@azure2:~$ sudo systemctl enable mariadb
+Synchronizing state of mariadb.service with SysV service script with /lib/systemd/systemd-sysv-install.
+Executing: /lib/systemd/systemd-sysv-install enable mariadb
+Je verifie que ca fonctionne avec systemctl status mariadb
+
+🌞 Ajouter un utilisateur dans la base de données pour que mon app puisse s'y connecter
+
+connectez-vous à la base de données pour pouvoir l'administrer en SQL
+caractéristiques attendus de l'utilisateur :
+
+appelez l'utilisateur meow
+le password doit être meow
+il doit être autorisé à se connecter depuis n'importe quelle machine
+il doit avoir tous les droits sur la database meow_database
+
+sarah@azure2:~$ sudo mysql
+
+MariaDB [(none)]> CREATE DATABASE meow_database;
+Query OK, 1 row affected (0.002 sec)
+
+MariaDB [(none)]> CREATE USER 'meow'@'%' IDENTIFIED BY 'meow';
+Query OK, 0 rows affected (0.010 sec)
+
+MariaDB [(none)]> GRANT ALL PRIVILEGES ON meow_database.* TO 'meow'@'%';
+Query OK, 0 rows affected (0.005 sec)
+
+MariaDB [(none)]> FLUSH PRIVILEGES;
+Query OK, 0 rows affected (0.001 sec)
+
+
+
+🌞 Ouvrez un port firewall si nécessaire
+
+pour rappel vous pouvez faire un sudo ss -lnpt pour savoir sur quel port tourne votre serveur de base de données
+
+sarah@azure2:~$ sudo ss -lnpt
+State   Recv-Q  Send-Q   Local Address:Port   Peer Address:Port  Process
+LISTEN  0       80           127.0.0.1:3306        0.0.0.0:*      users:(("mariadbd",pid=3015,fd=21))
+
+ce port doit être joignable par la machine azure1.tp1
+
+sarah@azure1:~$ sudo apt update
+sarah@azure1:~$ sudo apt install mariadb-client -y
+sarah@azure1:~$ mariadb -u meow -p -h 10.0.0.5
+Enter password:
+Welcome to the MariaDB monitor.
