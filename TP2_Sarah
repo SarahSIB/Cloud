@@ -1,0 +1,172 @@
+I. Un p'tit nom DNS¶
+Mini-partie pour définir un nom DNS à votre machine.
+
+➜ Définissez un nom de domaine pour joindre notre azure1.tp2
+
+WebUI ou CLI donc
+le nom de domaine est associé à l'IP publique portée par l'interface de azure1.tp2 (genre il est pas associé à la VM directement)
+le nom que vous choisissez doit contenir meow
+
+Chemin sur UI : tp1.rg(resource groupe) --> azure1.tp1(VM1) --> Paramètre reseau --> azure1.tp1PUBLICIP
+Nom de domaine facultatif : meowmeow
+Enregistrer
+
+🌞 Prouvez que c'est effectif
+
+une ou plusieurs commande(s) az qui retourne(nt) :
+
+la VM (genre au moins son nom)
+l'IP publique
+le nom DNS associé
+
+PS C:\Users\sarah> az network public-ip show -g tp1-rg -n azure1.tp1PublicIP --query "{ip:ipAddress, dnsName:dnsSettings.fqdn}" -o table
+Ip            DnsName
+------------  -----------------------------------------
+20.19.170.10  meowmeow.francecentral.cloudapp.azure.com
+
+🌞Un curl fonctionnel vers le nom de domaine
+sarah@azure1:~$ sudo apt install -y apache2
+sarah@azure1:~$ sudo systemctl start apache2
+sarah@azure1:~$ sudo systemctl enable apache2
+
+PS C:\Users\sarah> curl http://meowmeow.francecentral.cloudapp.azure.com
+
+StatusCode        : 200
+StatusDescription : OK
+Content           : <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+                    "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+                    <html xmlns="http://www.w3.org/1999/xhtml">
+                      <!--
+                        Modified from the Debia...
+RawContent        : HTTP/1.1 200 OK
+
+
+2. Gooooo¶
+➜ Sur votre PC, créez un fichier cloud-init.txt avec le contenu suivant :
+PS C:\Users\sarah> notepad cloud-init.txt
+
+#cloud-config
+disable_root: false
+system_info:
+  default_user:
+    name: sarah
+
+users:
+  - name: sarah
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: sudo
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIONekzDM3+gZNAJKTl9Ojf7CoVK7N07j8FEVmktxUc4L sarah@LAPTOP-NQC7EJ07
+
+  - name: chanel
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: sudo
+    shell: /bin/bash
+    ssh_authorized_keys:
+     - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIONekzDM3+gZNAJKTl9Ojf7CoVK7N07j8FEVmktxUc4L sarah@LAPTOP-NQC7EJ07
+
+🌞 Tester cloud-init
+
+PS C:\Users\sarah> az vm create --resource-group tp1-rg --name azure3.tp1 --image ubuntu2204 --custom-data C:\Users\sarah\cloud-init.txt --admin-username sarah --size Standard_B1s --public-ip-address '""'
+
+🌞 connectez-vous en SSH à la VM nouvellement créée, directement sur le nouvel utilisateur créé par cloud-init
+ssh sarah@20.19.170.10 chanel@10.0.0.7
+The authenticity of host '10.0.0.7 (<no hostip for proxy command>)' can't be established.
+ED25519 key fingerprint is SHA256:xmNBgz2tXmckMTpl8vY2fTOiUpuaX6QpRGXqKjP1q8s.
+
+chanel@azure3:~$ sudo systemctl status cloud-init
+● cloud-init.service - Cloud-init: Network Stage
+     Loaded: loaded (/lib/systemd/system/cloud-init.service; enabled; vendor preset: enabled)
+     Active: active (exited)
+
+chanel@azure3:~$ cloud-init status
+# Etat de cloud-init actuel, quand il s'est bien déroulé c'est "done"
+
+status: done
+
+
+
+chanel@azure3:~$ ls -al /var/log/cloud-init*
+-rw-r----- 1 root   adm   4402 Oct 30 12:12 /var/log/cloud-init-output.log
+-rw-r----- 1 syslog adm 138022 Oct 30 12:12 /var/log/cloud-init.log
+
+
+🌞 Utilisez cloud-init pour préconfigurer une VM comme azure2.tp2 :
+
+🌞ajoutez un user qui porte votre pseudo époser un fichier init.sql qui contient les commandes SQL du TP1
+ lance une commande mysql pour exécuter le contenu du script init.sql
+
+#cloud-config
+disable_root: false
+
+system_info:
+  default_user:
+    name: sarah
+
+users:
+  - name: sarah
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    lock_passwd: false
+    groups: [sudo]
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIONekzDM3+gZNAJKTl9Ojf7CoVK7N07j8FEVmktxUc4L sarah@LAPTOP-NQC7EJ07
+
+packages:
+  - mariadb-server
+
+write_files:
+  - path: /home/sarah/init.sql
+    owner: sarah:sarah
+    permissions: '0644'
+    content: |
+      CREATE DATABASE IF NOT EXISTS meow_database;
+      CREATE USER IF NOT EXISTS 'meow'@'%' IDENTIFIED BY 'meow';
+      GRANT ALL PRIVILEGES ON meow_database.* TO 'meow'@'%';
+      FLUSH PRIVILEGES;
+
+runcmd:
+  - systemctl enable mariadb
+  - systemctl start mariadb
+  - sudo mariadb < /home/sarah/init.sql
+
+
+
+🌞 Testez que ça fonctionne
+
+🌞un déploiement avec un az vm create en passant votre fichier cloud-init.txt
+connectez-vous en SSH, vérifiez que vous pouvez vous connecter au serveur de db (commande mysql) et que la base est créée
+
+PS C:\Users\sarah> az vm create --resource-group tp1-rg --name azure3-tp2 --image Ubuntu2204 --size Standard_B1s --custom-data "C:\Users\sarah\cloud-init.txt" --public-ip-address '""' --authentication-type ssh --ssh-key-values "C:\Users\sarah\.ssh\cloud_tp.pub"
+Je change le fichier de config en mettant ma nvl adresse ip ici : 10.0.0.10
+
+PS C:\Users\sarah> ssh az3
+The authenticity of host '10.0.0.10 (<no hostip for proxy command>)' can't be established.
+ED25519 key fingerprint is SHA256:X8DWD5uxD9cAmDAkeRO1JchB/m/T4w8Y1/EYGdBo/lw.
+This key is not known by any other names.
+
+
+sarah@azure3-tp2:~$ sudo systemctl status mariadb
+● mariadb.service - MariaDB 10.6.22 database server
+     Loaded: loaded (/lib/systemd/system/mariadb.service; enabled; vendor preset: enabled)
+     Active: active (running)
+
+
+sarah@azure3-tp2:~$ mysql -u meow -pmeow
+Welcome to the MariaDB monitor.  Commands end with ; or \g.
+Your MariaDB connection id is 38
+Server version: 10.6.22-MariaDB-0ubuntu0.22.04.1 Ubuntu 22.04
+
+Copyright (c) 2000, 2018, Oracle, MariaDB Corporation Ab and others.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+MariaDB [(none)]> SHOW DATABASES;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| meow_database      |
++--------------------+
+2 rows in set (0.000 sec)
