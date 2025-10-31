@@ -170,3 +170,138 @@ MariaDB [(none)]> SHOW DATABASES;
 | meow_database      |
 +--------------------+
 2 rows in set (0.000 sec)
+
+
+III - 
+1. Un premier secret¶
+Info
+Là je donne juste les étapes pour avoir ce qu'on veut.
+Documentez-vous pour les clics ou commandes az exacts.
+Je précise qu'il sera nécessaire de refaire ça après, alors avec az, ça sera facilement répétable encore une fois, par rapport à la WebUI... wink wink
+
+🌞 ➜ Créer un Key Vault
+
+ PS C:\Users\sarah> az provider register --namespace Microsoft.KeyVault
+Registering is still on-going. You can monitor using 'az provider show -n Microsoft.KeyVault'
+
+az keyvault create --name kv-tp1-sarah --resource-group tp1-rg --location francecentral --enable-rbac-authorization false
+
+
+🌞 ➜ Créer un secret
+
+on s'en fout pour le moment, phase de tests, met ce que tu veux
+➜ Activer la "Managed Identity" pour votre VM azure1.tp2
+
+PS C:\Users\sarah> az vm identity assign --name azure1.tp1 --resource-group tp1-rg
+{
+  "systemAssignedIdentity": "b94edb23-f38a-4d5c-8b2f-86e68a2a09b7",
+  "userAssignedIdentities": {}
+}
+
+
+c'est pour que ta VM ait une identité, genre qu'elle existe, dans le système d'authentification global d'Azure
+ta VM aura alors un "Principal ID" : son identifiant unique pour les authentifications Azure
+
+🌞 ➜ Configurer une Access policy
+
+c'genre les droits associés au Key Vault
+il faut donner à la VM les droits sur le Key Vault, pour qu'elle puisse récupérer des secrets
+ELLE A JUSTE BESOIN DE LES CONSULTER
+
+PS C:\Users\sarah> az keyvault set-policy --name kv-tp1-sarah --object-id b94edb23-f38a-4d5c-8b2f-86e68a2a09b7 --secret-permissions get list
+
+
+🌞 ➜ Créer un secret
+
+on s'en fout pour le moment, phase de tests, met ce que tu veux
+PS C:\Users\sarah> az keyvault secret set --vault-name kv-tp1-sarah --name test --value "cest_un_test"
+
+PS C:\Users\sarah> ssh az1
+sarah@azure1:~$ curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+
+sarah@azure1:~$ az keyvault secret show --vault-name kv-tp1-sarah --name test --query value -o tsv
+cest_un_test
+
+2. Gérer les secrets de l'application¶
+A. Script pour récupérer les secrets¶
+🌞 ➜ Créer un nouveau secret dans votre Key Vault
+
+ PS C:\Users\sarah> az keyvault secret set --vault-name kv-tp1-sarah --name DBPASSWORD --value "meow"
+
+
+
+🌞 Environnement du script get_secrets.sh, il doit :
+
+🌞 être stocké dans /usr/local/bin sur azure1.tp2 (commande mv)
+sarah@azure1:~$ sudo mv ./get_secrets.sh /usr/local/bin/get_secrets.sh
+
+🌞appartenir à l'utilisateur webapp (commande chown)
+sarah@azure1:~$ sudo chown webapp:webapp /usr/local/bin/get_secrets.sh
+sarah@azure1:~$ sudo chown -R webapp:webapp /opt/meow
+
+🌞être exécutable (commande chmod) et être inutilisable par les "autres" (ni r, ni w, ni x)
+sarah@azure1:~$ sudo chmod 700 /usr/local/bin/get_secrets.sh
+
+➜ Au cas où j'ai besoin de préciser... TU TESTES TON SCRIPT
+ Je verifie si il appartient bien a webapp
+ 
+ sarah@azure1:~$ ls -l /usr/local/bin/get_secrets.sh
+-rwx------ 1 webapp webapp 1251 Oct 31 09:48 /usr/local/bin/get_secrets.sh
+
+sarah@azure1:~$ sudo -u webapp /usr/local/bin/get_secrets.sh
+Connexion à Azure avec Managed Identity
+Connecté à Azure
+Secret DBPASSWORD modifié
+ise à jour du mot de passe dans /opt/meow/.env
+Fichier .env mis à jour
+
+🌞 Ajouter le script en ExecStartPre= dans webapp.service
+
+éditer le fichier webapp.service
+sudo nano /etc/systemd/system/webapp.service
+
+ajouter une ligne ExecStartPre=/usr/local/bin/get_secrets.sh dans la section [Service]
+[Unit]
+Description=Super Webapp MEOW
+After=network.target
+
+[Service]
+User=webapp
+Group=webapp
+WorkingDirectory=/opt/meow
+ExecStart=/opt/meow/venv/bin/python /opt/meow/app.py --host=0.0.0.0 --port=8000
+ExecStartPre=/usr/local/bin/get_secrets.sh
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+
+
+🌞exécuter une commande sudo systectl daemon-reload pour indiquer au système qu'on a modifié un service
+🌞relancer le service webapp
+
+sarah@azure1:~$ sudo systemctl daemon-reload
+sarah@azure1:~$ sudo systemctl restart webapp
+
+
+🌞 Prouvez que la ligne en ExecStartPre= a bien été exécutée
+sarah@azure1:~$ sudo systemctl status webapp
+● webapp.service - Super Webapp MEOW
+     Loaded: loaded (/etc/systemd/system/webapp.service; enabled; vendor preset: enabled)
+     Active: activating (start-pre) since Fri 2025-10-31 11:37:35 UTC; 769ms ago
+Cntrl PID: 10026 (get_secrets.sh)
+      Tasks: 4 (limit: 1009)
+     Memory: 40.1M
+        CPU: 674ms
+     CGroup: /system.slice/webapp.service
+             ├─10026 /bin/bash /usr/local/bin/get_secrets.sh
+             ├─10027 bash /usr/bin/az login --identity --allow-no-subscriptions
+             └─10030 /usr/bin/../../opt/az/bin/python3 -Im azure.cli login --identity --allow-no-subscriptions
+
+Oct 31 11:37:35 azure1 systemd[1]: Starting Super Webapp MEOW...
+Oct 31 11:37:35 azure1 get_secrets.sh[10026]: Connexion à Azure via Managed Identity...
+
+
+C. Secret Flask¶
+
